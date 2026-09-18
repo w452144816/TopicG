@@ -4,22 +4,40 @@ Gradio 网页 + AI 引擎（MiniMax / Claude，均走 Anthropic 兼容协议）�
 
 功能流程：录入客户资料（截图 / 文字）→ AI 提取并建立客户画像 → 生成聊天话题 → 生成候选回复 → 多轮对话陪练。每位客户一份独立存档（`data/customers/<id>.json`）。
 
+## 部署
+
+要求：Python 3.10 以上（在 3.13 上验证）。
+
+```powershell
+# Windows：一键脚本（建 .venv、装依赖、生成 .env）
+.\setup.ps1            # 按 requirements.txt
+.\setup.ps1 -Lock      # 按 requirements.lock.txt 完整锁定版本，跨机器 100% 复现
+
+# Linux / macOS
+./setup.sh             # 或 ./setup.sh --lock
+```
+
+手动等价步骤：
+
+```powershell
+py -3 -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt
+copy .env.example .env
+```
+
+依赖文件说明：`requirements.txt` 只列直接依赖并固定版本；`requirements.lock.txt` 是 `pip freeze` 的完整快照，用于严格复现。
+
 ## 启动
 
 ```powershell
-# 1. 建环境（已建过可跳过）
-py -3.13 -m venv .venv
-.venv\Scripts\python -m pip install -r requirements.txt
+# 1. 配置 Key
+# 编辑 .env，填 MINIMAX_API_KEY 和/或 ANTHROPIC_API_KEY，按需设置代理
 
-# 2. 配置 Key
-copy .env.example .env
-# 编辑 .env，填 MINIMAX_API_KEY 和/或 ANTHROPIC_API_KEY
-
-# 3. 连通性测试（可选，第二个参数为测试图片）
+# 2. 连通性测试（可选，第二个参数为测试图片）
 .venv\Scripts\python scripts\smoke_test.py
 .venv\Scripts\python scripts\smoke_test.py some_screenshot.png
 
-# 4. 启动
+# 3. 启动
 .venv\Scripts\python app.py                 # 从 7860 起自动找空闲端口
 .venv\Scripts\python app.py --port 8000     # 指定端口
 .venv\Scripts\python app.py --share         # 额外生成 gradio.live 公网临时链接

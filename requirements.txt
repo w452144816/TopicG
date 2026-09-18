@@ -1,3 +1,6 @@
-gradio>=6.0
-anthropic>=1.0
-python-dotenv>=1.0
+# 直接依赖（已在 Python 3.13 / Windows 11 上验证）
+# 完整锁定版本见 requirements.lock.txt，需要 100% 复现环境时用它安装
+gradio==6.27.0
+anthropic==1.6.0
+python-dotenv==1.2.3
+pillow==12.3.0
