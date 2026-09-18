@@ -100,7 +100,7 @@ def build(shared: dict) -> tuple[list, callable]:
             gr.Markdown("#### 已录入的材料")
             inputs_md = gr.Markdown(render_me_inputs(me))
             with gr.Row():
-                del_idx = gr.Number(label="删除第几条材料", precision=0, minimum=1, scale=2)
+                del_idx = gr.Number(label="删除第几条材料（序号）", precision=0, value=None, scale=2)
                 del_btn = gr.Button("删除该条", scale=1)
             confirm = gr.Checkbox(label="我确认清空全部材料与画像", value=False)
             reset_btn = gr.Button("🗑 清空我的建模", variant="stop")
