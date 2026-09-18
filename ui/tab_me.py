@@ -57,6 +57,9 @@ def render_me_inputs(me: dict[str, Any]) -> str:
         return "> 还没有录入材料。建议：3 到 5 张你和不同客户的聊天截图 + 一段自我描述（性格、做事原则、忌讳）。"
     out = []
     for i, item in enumerate(items, 1):
+        if item.get("type") == "note":
+            out.append(f"**{i}. [本人纠正/备注] {item.get('added_at', '')}**\n  - {item.get('content', '')}")
+            continue
         ex = item.get("extracted") or {}
         src = ex.get("source_summary", "") if isinstance(ex, dict) else ""
         quotes = ex.get("my_quotes", []) if isinstance(ex, dict) else []
@@ -85,10 +88,15 @@ def build(shared: dict) -> tuple[list, callable]:
             text = gr.Textbox(label="我的自述 / 我说过的话（可选）", lines=12,
                               placeholder="例如：我说话比较直接，不喜欢客套；从不催客户，宁愿慢一点；爱用『哈哈』和 ~ ；绝对不用『亲』『宝』……\n也可以直接粘贴一段你发给客户的消息。")
     with gr.Row():
-        auto = gr.Checkbox(label="录入后立即重新建模", value=True)
-        btn = gr.Button("🔍 录入并分析", variant="primary")
-        rebuild = gr.Button("🧬 重新建模", variant="secondary")
+        auto = gr.Checkbox(label="录入后立即更新画像（增量：在现有画像基础上补充修正）", value=True)
+        btn = gr.Button("🔍 追加录入并分析", variant="primary")
+        rebuild = gr.Button("🧬 用全部材料更新画像", variant="secondary")
     result = gr.JSON(label="本次提取结果")
+
+    with gr.Row():
+        note = gr.Textbox(label="纠正 / 备注（直接告诉 AI 关于你的事实，权重最高，不经提取）", lines=2, scale=4,
+                          placeholder="例如：我其实不爱用『哈哈』，更常用『嗯嗯』；我对老客户会更随意；节假日我一定会发问候")
+        note_btn = gr.Button("📌 追加备注", scale=1)
 
     with gr.Row():
         with gr.Column(scale=3):
@@ -130,6 +138,17 @@ def build(shared: dict) -> tuple[list, callable]:
 
     btn.click(run, [files, hint, text, auto, prov, key, model, proxy],
               [result, profile_md, profile_json, inputs_md, files, text])
+
+    @safe
+    def do_note(txt, do_auto, p, k, m, px, progress=gr.Progress()):
+        services.me_add_note(txt)
+        if do_auto:
+            progress(0.5, desc="更新画像中…")
+            services.me_analyze(cfg_from_ui(p, k, m, px))
+        gr.Info("备注已追加" + ("，画像已更新" if do_auto else ""))
+        return (*_all(), "")
+
+    note_btn.click(do_note, [note, auto, prov, key, model, proxy], [profile_md, profile_json, inputs_md, note])
 
     @safe
     def do_rebuild(p, k, m, px, progress=gr.Progress()):

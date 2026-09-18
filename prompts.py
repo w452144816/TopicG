@@ -21,8 +21,12 @@ EXTRACT_SYSTEM = """你是一名资深客户关系顾问的助理。用户会给
 }
 信息缺失就留空字符串或空数组，不要编造。"""
 
-PROFILE_SYSTEM = """你是一名客户洞察分析师。下面是同一位客户的多条录入材料（已由 AI 从截图/文字中提取）。
-请综合所有材料，为这位客户建立一份画像，用于后续生成聊天话题和回复。矛盾之处以时间较新的材料为准。
+PROFILE_SYSTEM = """你是一名客户洞察分析师。下面是同一位客户的多条录入材料（已由 AI 从截图/文字中提取），可能还附有"当前画像"。
+请综合所有材料，为这位客户建立/更新画像，用于后续生成聊天话题和回复。
+规则：
+- 材料中标注为"使用者纠正/备注"的内容是使用者亲自写的，权重最高，与其他材料冲突时以它为准。
+- 其余矛盾之处以时间较新的材料为准。
+- 如果给了"当前画像"，请在其基础上增量更新：保留仍然成立的结论，用新材料补充细节、修正错误，不要无故丢失旧信息。
 
 输出 JSON 对象，字段与含义：
 {
@@ -55,8 +59,11 @@ ME_EXTRACT_SYSTEM = """你是一名语言风格与人格分析师。用户会给
 }
 没有的字段留空数组，不要编造。"""
 
-ME_PROFILE_SYSTEM = """你是一名人格建模师。下面是"使用者本人"（销售/客户经理）的多条材料分析结果与原话。
-请综合建立一份可供 AI 模仿其说话的人格画像。重点是：让另一个人拿到这份画像后，写出来的微信消息像是本人发的。
+ME_PROFILE_SYSTEM = """你是一名人格建模师。下面是"使用者本人"（销售/客户经理）的多条材料分析结果与原话，可能还附有"当前画像"。
+请综合建立/更新一份可供 AI 模仿其说话的人格画像。重点是：让另一个人拿到这份画像后，写出来的微信消息像是本人发的。
+规则：
+- 材料中标注为"本人纠正/备注"的内容是使用者对自己的直接说明（例如"我其实不爱用哈哈"），权重最高，必须体现，与分析结果冲突时以它为准。
+- 如果给了"当前画像"，请在其基础上增量更新：保留仍然成立的结论，用新材料补充口头禅、示范消息等细节，修正错误，不要无故丢失旧信息。
 
 输出 JSON 对象：
 {
@@ -119,14 +126,33 @@ def dumps(obj: Any) -> str:
     return json.dumps(obj, ensure_ascii=False, indent=2)
 
 
+def _materials(items: list[dict[str, Any]], note_label: str, extracted_label: str) -> list[str]:
+    parts: list[str] = []
+    for i, item in enumerate(items, 1):
+        t = item.get("type")
+        if t == "note":
+            parts.append(f"### 材料 {i}（{note_label}，权重最高，录入于 {item.get('added_at')}）")
+            parts.append(item.get("content") or "")
+        else:
+            parts.append(f"### 材料 {i}（{t}，录入于 {item.get('added_at')}）")
+            if t == "text":
+                parts.append("原文：\n" + (item.get("content") or "")[:3000])
+            parts.append(f"{extracted_label}：\n" + dumps(item.get("extracted")))
+        parts.append("")
+    return parts
+
+
+def _prior(profile: dict[str, Any] | None) -> list[str]:
+    if not profile:
+        return []
+    prof = {k: v for k, v in profile.items() if k not in ("analyzed_at", "provider")}
+    return ["### 当前画像（请在此基础上增量更新）", dumps(prof), ""]
+
+
 def build_profile_input(customer: dict[str, Any]) -> str:
     parts = [f"客户姓名/称呼：{customer.get('name', '')}", f"标签：{', '.join(customer.get('tags', [])) or '无'}", ""]
-    for i, item in enumerate(customer.get("raw_inputs", []), 1):
-        parts.append(f"### 材料 {i}（{item.get('type')}，录入于 {item.get('added_at')}）")
-        if item.get("type") == "text":
-            parts.append("原文：\n" + (item.get("content") or "")[:3000])
-        parts.append("提取结果：\n" + dumps(item.get("extracted")))
-        parts.append("")
+    parts += _prior(customer.get("profile"))
+    parts += _materials(customer.get("raw_inputs", []), "使用者纠正/备注", "提取结果")
     return "\n".join(parts)
 
 
@@ -140,12 +166,8 @@ def me_block(me: dict[str, Any] | None) -> str:
 
 def build_me_profile_input(me: dict[str, Any]) -> str:
     parts = [f"我的称呼：{me.get('name', '') or '未填'}", f"我的身份/岗位：{me.get('role', '') or '未填'}", ""]
-    for i, item in enumerate(me.get("raw_inputs", []), 1):
-        parts.append(f"### 材料 {i}（{item.get('type')}，录入于 {item.get('added_at')}）")
-        if item.get("type") == "text":
-            parts.append("原文：\n" + (item.get("content") or "")[:3000])
-        parts.append("分析结果：\n" + dumps(item.get("extracted")))
-        parts.append("")
+    parts += _prior(me.get("profile"))
+    parts += _materials(me.get("raw_inputs", []), "本人纠正/备注", "分析结果")
     return "\n".join(parts)
 
 

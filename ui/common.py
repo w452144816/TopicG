@@ -125,6 +125,9 @@ def render_inputs(c: dict[str, Any] | None) -> str:
         return "> 该客户还没有录入材料。"
     out = []
     for i, item in enumerate(c["raw_inputs"], 1):
+        if item.get("type") == "note":
+            out.append(f"**{i}. [纠正/备注] {item.get('added_at', '')}**\n  - {item.get('content', '')}")
+            continue
         ex = item.get("extracted") or {}
         src = ex.get("source_summary", "") if isinstance(ex, dict) else ""
         quotes = ex.get("key_quotes", []) if isinstance(ex, dict) else []

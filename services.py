@@ -57,6 +57,25 @@ def intake(cid: str, text: str, image_files: list[str], provider: ProviderConfig
     return added
 
 
+def add_note(cid: str, note: str) -> dict[str, Any]:
+    """使用者对客户的纠正 / 备注，直接存档不经 AI 提取，建模时权重最高。"""
+    c = _require(cid)
+    if not note.strip():
+        raise ai.AIError("备注内容为空。")
+    c["raw_inputs"].append({"type": "note", "content": note.strip(), "extracted": None,
+                            "added_at": storage.now(), "provider": "手动"})
+    storage.save(c)
+    return c
+
+
+def remove_input(cid: str, index: int) -> dict[str, Any]:
+    c = _require(cid)
+    if 0 <= index < len(c["raw_inputs"]):
+        c["raw_inputs"].pop(index)
+        storage.save(c)
+    return c
+
+
 def analyze(cid: str, provider: ProviderConfig) -> dict[str, Any]:
     c = _require(cid)
     if not c["raw_inputs"]:
@@ -149,6 +168,17 @@ def me_intake(text: str, image_files: list[str], provider: ProviderConfig, hint:
     me["raw_inputs"].extend(added)
     storage.save_me(me)
     return added
+
+
+def me_add_note(note: str) -> dict[str, Any]:
+    """本人对自己的纠正 / 备注，直接存档，建模时权重最高。"""
+    me = storage.load_me()
+    if not note.strip():
+        raise ai.AIError("备注内容为空。")
+    me["raw_inputs"].append({"type": "note", "content": note.strip(), "extracted": None,
+                             "added_at": storage.now(), "provider": "手动"})
+    storage.save_me(me)
+    return me
 
 
 def me_analyze(provider: ProviderConfig) -> dict[str, Any]:
