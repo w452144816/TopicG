@@ -53,7 +53,10 @@ def _text_of(response: anthropic.types.Message) -> str:
     return "".join(b.text for b in response.content if b.type == "text").strip()
 
 
-def chat(cfg: ProviderConfig, system: str, messages: list[dict[str, Any]], max_tokens: int = 4096) -> str:
+DEFAULT_MAX_TOKENS = 16000  # 别设太小：MiniMax-M3 等模型输出偏长，截断会导致 JSON 不完整
+
+
+def chat(cfg: ProviderConfig, system: str, messages: list[dict[str, Any]], max_tokens: int = DEFAULT_MAX_TOKENS) -> str:
     client = get_client(cfg)
     try:
         resp = client.messages.create(
@@ -76,12 +79,12 @@ def chat(cfg: ProviderConfig, system: str, messages: list[dict[str, Any]], max_t
     return text
 
 
-def chat_text(cfg: ProviderConfig, system: str, user_text: str, max_tokens: int = 4096) -> str:
+def chat_text(cfg: ProviderConfig, system: str, user_text: str, max_tokens: int = DEFAULT_MAX_TOKENS) -> str:
     return chat(cfg, system, [{"role": "user", "content": user_text}], max_tokens)
 
 
 def chat_with_images(cfg: ProviderConfig, system: str, user_text: str,
-                     image_paths: list[str | Path], max_tokens: int = 4096) -> str:
+                     image_paths: list[str | Path], max_tokens: int = DEFAULT_MAX_TOKENS) -> str:
     if not cfg.supports_vision:
         raise AIError(f"{cfg.label} 当前配置不支持图片输入，请切换到 Claude 进行图片提取。")
     content: list[dict[str, Any]] = [_image_block(p) for p in image_paths]
@@ -97,25 +100,50 @@ def chat_with_images(cfg: ProviderConfig, system: str, user_text: str,
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE | re.MULTILINE)
 
 
+def _salvage_truncated_array(cleaned: str) -> list[Any] | None:
+    """输出被截断（max_tokens 不够）时，从 JSON 数组里逐个取出已完整的对象。"""
+    start = cleaned.find("[")
+    if start == -1:
+        return None
+    decoder = json.JSONDecoder()
+    items: list[Any] = []
+    i, n = start + 1, len(cleaned)
+    while True:
+        while i < n and cleaned[i] in " \t\r\n,":
+            i += 1
+        if i >= n or cleaned[i] == "]":
+            break
+        try:
+            obj, end = decoder.raw_decode(cleaned, i)
+        except json.JSONDecodeError:
+            break
+        items.append(obj)
+        i = end
+    return items or None
+
+
 def parse_json(text: str) -> Any:
-    """宽松解析：去围栏 → 直接 loads → 抓第一个 {…} 或 […]。"""
+    """宽松解析：去围栏 → 直接 loads → 抓第一个 {…} 或 […] → 截断数组抢救。"""
     cleaned = _FENCE.sub("", text.strip()).strip()
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
         pass
-    for opener, closer in (("{", "}"), ("[", "]")):
+    for opener, closer in (("[", "]"), ("{", "}")):
         s, e = cleaned.find(opener), cleaned.rfind(closer)
         if s != -1 and e > s:
             try:
                 return json.loads(cleaned[s:e + 1])
             except json.JSONDecodeError:
                 continue
+    salvaged = _salvage_truncated_array(cleaned)
+    if salvaged:
+        return salvaged
     raise AIError("模型输出不是合法 JSON，原文：\n" + text[:800])
 
 
 def chat_json(cfg: ProviderConfig, system: str, user_text: str,
-              image_paths: list[str | Path] | None = None, max_tokens: int = 4096) -> Any:
+              image_paths: list[str | Path] | None = None, max_tokens: int = DEFAULT_MAX_TOKENS) -> Any:
     system = system.rstrip() + "\n\n只输出 JSON，不要任何解释、前后缀或 Markdown 围栏。"
     if image_paths:
         raw = chat_with_images(cfg, system, user_text, image_paths, max_tokens)

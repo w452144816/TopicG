@@ -61,7 +61,7 @@ def analyze(cid: str, provider: ProviderConfig) -> dict[str, Any]:
     c = _require(cid)
     if not c["raw_inputs"]:
         raise ai.AIError("该客户还没有任何录入材料，请先在「资料录入」中添加。")
-    profile = ai.chat_json(provider, prompts.PROFILE_SYSTEM, prompts.build_profile_input(c), max_tokens=6000)
+    profile = ai.chat_json(provider, prompts.PROFILE_SYSTEM, prompts.build_profile_input(c))
     if not isinstance(profile, dict):
         raise ai.AIError("画像结果格式异常，请重试。")
     profile["analyzed_at"] = storage.now()
@@ -75,7 +75,7 @@ def generate_topics(cid: str, purpose: str, n: int, provider: ProviderConfig) ->
     c = _require(cid)
     if not c.get("profile"):
         raise ai.AIError("该客户尚未分析，请先在「分析页」生成画像。")
-    topics = ai.chat_json(provider, prompts.TOPICS_SYSTEM, prompts.build_topics_input(c, purpose, n), max_tokens=6000)
+    topics = ai.chat_json(provider, prompts.TOPICS_SYSTEM, prompts.build_topics_input(c, purpose, n))
     topics = _as_list(topics, "opening_line", ("topics", "items", "data"))
     c["topics_history"].insert(0, {"generated_at": storage.now(), "purpose": purpose,
                                    "provider": provider.label, "topics": topics})
