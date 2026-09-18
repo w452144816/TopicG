@@ -75,7 +75,8 @@ def generate_topics(cid: str, purpose: str, n: int, provider: ProviderConfig) ->
     c = _require(cid)
     if not c.get("profile"):
         raise ai.AIError("该客户尚未分析，请先在「分析页」生成画像。")
-    topics = ai.chat_json(provider, prompts.TOPICS_SYSTEM, prompts.build_topics_input(c, purpose, n))
+    topics = ai.chat_json(provider, prompts.TOPICS_SYSTEM,
+                          prompts.build_topics_input(c, purpose, n, storage.load_me()))
     topics = _as_list(topics, "opening_line", ("topics", "items", "data"))
     c["topics_history"].insert(0, {"generated_at": storage.now(), "purpose": purpose,
                                    "provider": provider.label, "topics": topics})
@@ -91,7 +92,8 @@ def generate_replies(cid: str, incoming: str, styles: list[str], provider: Provi
     if not styles:
         styles = ["亲切"]
     ctx = "\n".join(f"{'我' if m['role'] == 'user' else '客户'}：{m['content']}" for m in c["chat_history"][-8:])
-    replies = ai.chat_json(provider, prompts.REPLY_SYSTEM, prompts.build_reply_input(c, incoming, styles, ctx))
+    replies = ai.chat_json(provider, prompts.REPLY_SYSTEM,
+                           prompts.build_reply_input(c, incoming, styles, ctx, storage.load_me()))
     replies = _as_list(replies, "reply", ("replies", "items", "data"))
     return replies
 
@@ -106,7 +108,7 @@ def roleplay_turn(cid: str, mode: str, user_msg: str, provider: ProviderConfig) 
     msgs = [{"role": m["role"], "content": m["content"]} for m in history[-20:]]
     if msgs[0]["role"] != "user":
         msgs = msgs[1:]
-    reply = ai.chat(provider, prompts.roleplay_system(mode, c), msgs, max_tokens=2000)
+    reply = ai.chat(provider, prompts.roleplay_system(mode, c, storage.load_me()), msgs, max_tokens=2000)
     history.append({"role": "assistant", "content": reply})
     storage.save(c)
     return history
@@ -123,3 +125,62 @@ def update_tags(cid: str, tags_text: str) -> dict[str, Any]:
     c["tags"] = [t.strip() for t in tags_text.replace("，", ",").split(",") if t.strip()]
     storage.save(c)
     return c
+
+
+# ---------------- 使用者本人建模 ----------------
+def me_intake(text: str, image_files: list[str], provider: ProviderConfig, hint: str = "") -> list[dict[str, Any]]:
+    """录入本人的聊天截图 / 自述文本，提取说话风格与人格线索。"""
+    me = storage.load_me()
+    who = f"使用者本人称呼：{me.get('name') or '未填'}，身份：{me.get('role') or '未填'}。{hint}".strip()
+    added: list[dict[str, Any]] = []
+    for f in image_files or []:
+        saved = storage.save_me_image(f)
+        extracted = ai.chat_json(provider, prompts.ME_EXTRACT_SYSTEM,
+                                 f"{who}\n请只分析截图中「使用者本人」这一方说的话。", image_paths=[saved])
+        added.append({"type": "image", "content": saved, "extracted": extracted,
+                      "added_at": storage.now(), "provider": provider.label})
+    if text and text.strip():
+        extracted = ai.chat_json(provider, prompts.ME_EXTRACT_SYSTEM,
+                                 f"{who}\n下面是使用者本人的聊天记录或自述文字，请分析：\n\n{text.strip()}")
+        added.append({"type": "text", "content": text.strip(), "extracted": extracted,
+                      "added_at": storage.now(), "provider": provider.label})
+    if not added:
+        raise ai.AIError("请至少上传一张图片或粘贴一段文本。")
+    me["raw_inputs"].extend(added)
+    storage.save_me(me)
+    return added
+
+
+def me_analyze(provider: ProviderConfig) -> dict[str, Any]:
+    me = storage.load_me()
+    if not me["raw_inputs"]:
+        raise ai.AIError("还没有录入你自己的材料，请先上传聊天截图或粘贴文字。")
+    profile = ai.chat_json(provider, prompts.ME_PROFILE_SYSTEM, prompts.build_me_profile_input(me))
+    if not isinstance(profile, dict):
+        raise ai.AIError("画像结果格式异常，请重试。")
+    profile["analyzed_at"] = storage.now()
+    profile["provider"] = f"{provider.label} / {provider.model}"
+    me["profile"] = profile
+    storage.save_me(me)
+    return profile
+
+
+def me_update_basic(name: str, role: str) -> dict[str, Any]:
+    me = storage.load_me()
+    me["name"], me["role"] = name.strip(), role.strip()
+    storage.save_me(me)
+    return me
+
+
+def me_remove_input(index: int) -> dict[str, Any]:
+    me = storage.load_me()
+    if 0 <= index < len(me["raw_inputs"]):
+        me["raw_inputs"].pop(index)
+        storage.save_me(me)
+    return me
+
+
+def me_reset() -> None:
+    me = storage.load_me()
+    me.update({"raw_inputs": [], "profile": None})
+    storage.save_me(me)

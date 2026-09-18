@@ -19,7 +19,8 @@ def build(shared: dict) -> tuple[list, callable]:
     customer_dd, prov, key, model, proxy = (shared["customer"], shared["provider"], shared["key"],
                                            shared["model"], shared["proxy"])
 
-    gr.Markdown("### 候选回复\n粘贴客户刚发来的消息，生成多种风格的回复。")
+    gr.Markdown("### 候选回复\n粘贴客户刚发来的消息，AI 以**你本人**的口吻和心态（来自「我的建模」）生成多种风格的回复。"
+                "风格是在你本人基础上的微调，不会变成另一个人。未建模时使用通用口吻。")
     with gr.Row():
         incoming = gr.Textbox(label="客户发来的消息", lines=3, scale=3)
         with gr.Column(scale=2):

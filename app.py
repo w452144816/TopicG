@@ -16,7 +16,7 @@ import gradio as gr  # noqa: E402
 
 import storage
 from config import DEFAULT_PROVIDER, PROVIDERS, PROVIDER_LABELS, PROXY_ENABLED, PROXY_URL
-from ui import tab_analysis, tab_chat, tab_customers, tab_intake, tab_topics
+from ui import tab_analysis, tab_chat, tab_customers, tab_intake, tab_me, tab_topics
 from ui.common import customer_dropdown_update
 
 
@@ -53,9 +53,9 @@ def build() -> gr.Blocks:
 
         tabs = []
         with gr.Tabs():
-            for title, mod in [("👥 客户管理", tab_customers), ("📥 资料录入", tab_intake),
-                               ("🧠 分析页", tab_analysis), ("💡 话题生成", tab_topics),
-                               ("💬 聊天回复", tab_chat)]:
+            for title, mod in [("🙋 我的建模", tab_me), ("👥 客户管理", tab_customers),
+                               ("📥 资料录入", tab_intake), ("🧠 分析页", tab_analysis),
+                               ("💡 话题生成", tab_topics), ("💬 聊天回复", tab_chat)]:
                 with gr.Tab(title):
                     tabs.append(mod.build(shared))
 

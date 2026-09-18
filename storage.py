@@ -99,3 +99,33 @@ def save_image(cid: str, src: str | Path) -> str:
 def choices() -> list[tuple[str, str]]:
     """Gradio Dropdown 用的 (label, value) 列表。"""
     return [(f"{c['name']}  [{', '.join(c['tags']) or '无标签'}]", c["id"]) for c in list_customers()]
+
+
+# ---------------- 使用者本人画像（全局唯一） ----------------
+ME_PATH = DATA_DIR.parent / "me.json"
+ME_IMG_DIR = DATA_DIR.parent / "me_images"
+
+
+def load_me() -> dict[str, Any]:
+    if ME_PATH.exists():
+        try:
+            return json.loads(ME_PATH.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {"name": "", "role": "", "raw_inputs": [], "profile": None, "updated_at": ""}
+
+
+def save_me(obj: dict[str, Any]) -> None:
+    ME_PATH.parent.mkdir(parents=True, exist_ok=True)
+    obj["updated_at"] = now()
+    tmp = ME_PATH.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, ME_PATH)
+
+
+def save_me_image(src: str | Path) -> str:
+    ME_IMG_DIR.mkdir(parents=True, exist_ok=True)
+    src = Path(src)
+    dst = ME_IMG_DIR / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}{src.suffix.lower() or '.png'}"
+    shutil.copyfile(src, dst)
+    return str(dst)
