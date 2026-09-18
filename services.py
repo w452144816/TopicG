@@ -98,18 +98,67 @@ def analyze(cid: str, provider: ProviderConfig) -> dict[str, Any]:
     return profile
 
 
-def generate_topics(cid: str, purpose: str, n: int, provider: ProviderConfig) -> list[dict[str, Any]]:
+def generate_topics(cid: str, purpose: str, n: int, provider: ProviderConfig,
+                    avoid: list[str] | None = None) -> list[dict[str, Any]]:
+    """avoid：上一批话题标题，传入后要求模型换角度、不重复。"""
     c = _require(cid)
     if not c.get("profile"):
         raise ai.AIError("该客户尚未分析，请先在「分析页」生成画像。")
     topics = ai.chat_json(provider, prompts.TOPICS_SYSTEM,
-                          prompts.build_topics_input(c, purpose, n, storage.load_me()))
+                          prompts.build_topics_input(c, purpose, n, storage.load_me(), avoid))
     topics = _as_list(topics, "opening_line", ("topics", "items", "data"))
     c["topics_history"].insert(0, {"generated_at": storage.now(), "purpose": purpose,
                                    "provider": provider.label, "topics": topics})
     c["topics_history"] = c["topics_history"][:20]
     storage.save(c)
     return topics
+
+
+def rewrite_text(cid: str, text: str, instruction: str, provider: ProviderConfig) -> str:
+    """以"我"的口吻按要求改写一条消息（话题开场白 / 候选回复）。"""
+    c = _require(cid)
+    if not (text or "").strip():
+        raise ai.AIError("没有可改写的内容。")
+    if not (instruction or "").strip():
+        raise ai.AIError("请选择或填写改写要求。")
+    out = ai.chat_text(provider, prompts.REWRITE_SYSTEM,
+                       prompts.build_rewrite_input(c, text, instruction, storage.load_me()), max_tokens=1000)
+    return out.strip().strip('"「」“”')
+
+
+def rewrite_topic(cid: str, index: int, instruction: str, provider: ProviderConfig) -> list[dict[str, Any]]:
+    """改写最近一批话题中第 index 条的开场白，写回历史并返回整批。"""
+    c = _require(cid)
+    if not c.get("topics_history"):
+        raise ai.AIError("还没有生成过话题。")
+    topics = c["topics_history"][0]["topics"]
+    if not 0 <= index < len(topics):
+        raise ai.AIError("请选择要改写的话题。")
+    t = topics[index]
+    t["opening_line"] = rewrite_text(cid, t.get("opening_line", ""), instruction, provider)
+    t["rewritten"] = instruction
+    storage.save(c)
+    return topics
+
+
+def _merge_profile(base: dict[str, Any] | None, edited: Any, template: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(edited, dict):
+        raise ai.AIError("画像必须是 JSON 对象（花括号包起来的键值对）。")
+    base = base or {}
+    merged = {**template, **edited}
+    for k in ("analyzed_at", "provider"):
+        if base.get(k):
+            merged[k] = base[k]
+    merged["edited_at"] = storage.now()
+    return merged
+
+
+def update_profile(cid: str, edited: Any) -> dict[str, Any]:
+    """使用者手工编辑客户画像后保存。保留 analyzed_at / provider，补齐缺失字段。"""
+    c = _require(cid)
+    c["profile"] = _merge_profile(c.get("profile"), edited, storage.empty_profile())
+    storage.save(c)
+    return c["profile"]
 
 
 def generate_replies(cid: str, incoming: str, styles: list[str], provider: ProviderConfig) -> list[dict[str, Any]]:
@@ -208,6 +257,14 @@ def me_analyze(provider: ProviderConfig) -> dict[str, Any]:
     me["profile"] = profile
     storage.save_me(me)
     return profile
+
+
+def me_update_profile(edited: Any) -> dict[str, Any]:
+    """使用者手工编辑本人画像后保存。"""
+    me = storage.load_me()
+    me["profile"] = _merge_profile(me.get("profile"), edited, {})
+    storage.save_me(me)
+    return me["profile"]
 
 
 def me_update_basic(name: str, role: str) -> dict[str, Any]:

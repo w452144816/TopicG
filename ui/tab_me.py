@@ -8,7 +8,8 @@ import gradio as gr
 import ingest
 import services
 import storage
-from ui.common import _li, cfg_from_ui, click_locked, delete_dropdown, input_choices, refresh_button, safe
+from ui.common import (_li, cfg_from_ui, click_locked, delete_dropdown, input_choices, profile_dumps, profile_editor,
+                       profile_loads, refresh_button, safe)
 
 
 def render_me(me: dict[str, Any]) -> str:
@@ -106,8 +107,8 @@ def build(shared: dict) -> tuple[list, callable]:
         with gr.Column(scale=3):
             gr.Markdown("#### 我的画像")
             profile_md = gr.Markdown(render_me(me), buttons=["copy"])
-            with gr.Accordion("原始画像 JSON", open=False):
-                profile_json = gr.JSON(value=me.get("profile"))
+            with gr.Accordion("✏️ 手工修正画像（JSON，改完点保存）", open=False):
+                profile_json, save_profile_btn = profile_editor()
         with gr.Column(scale=2):
             gr.Markdown("#### 已录入的材料")
             inputs_md = gr.Markdown(render_me_inputs(me))
@@ -119,7 +120,7 @@ def build(shared: dict) -> tuple[list, callable]:
 
     def _all():
         m = storage.load_me()
-        return (render_me(m), m.get("profile"), render_me_inputs(m),
+        return (render_me(m), profile_dumps(m.get("profile")), render_me_inputs(m),
                 gr.update(choices=input_choices(m.get("raw_inputs"), "my_quotes"), value=None))
 
     ALL = [profile_md, profile_json, inputs_md, del_sel]
@@ -132,6 +133,14 @@ def build(shared: dict) -> tuple[list, callable]:
         return _all()
 
     ev_save = save_basic.click(do_save_basic, [name_in, role_in], ALL)
+
+    @safe
+    def do_save_profile(text):
+        services.me_update_profile(profile_loads(text))
+        gr.Info("画像已保存")
+        return _all()
+
+    ev_save_profile = save_profile_btn.click(do_save_profile, [profile_json], ALL)
 
     @safe
     def run(fs, hint_txt, txt, do_auto, p, k, m, px, progress=gr.Progress()):
@@ -190,5 +199,5 @@ def build(shared: dict) -> tuple[list, callable]:
     def refresh(_cid):
         return _all()
 
-    events = [ev_save, ev_run, ev_note, ev_rebuild, ev_del, ev_reset, refresh_btn.click(lambda: None)]
+    events = [ev_save, ev_save_profile, ev_run, ev_note, ev_rebuild, ev_del, ev_reset, refresh_btn.click(lambda: None)]
     return ALL, refresh, events

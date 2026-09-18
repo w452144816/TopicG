@@ -5,7 +5,8 @@ import gradio as gr
 
 import services
 import storage
-from ui.common import cfg_from_ui, click_locked, refresh_button, render_replies, replies_plain, safe
+from ui.common import (cfg_from_ui, click_locked, index_choices, refresh_button, render_replies, replies_plain,
+                       rewrite_row, safe)
 
 STYLES = ["正式", "亲切", "幽默", "简短", "推进业务"]
 MODES = {"AI 扮演客户（陪练）": "customer", "AI 做我的助手（出主意）": "assistant"}
@@ -29,16 +30,35 @@ def build(shared: dict) -> tuple[list, callable]:
             styles = gr.CheckboxGroup(STYLES, value=["正式", "亲切", "幽默"], label="回复风格")
             reply_btn = gr.Button("✉️ 生成回复", variant="primary")
     replies_md = gr.Markdown("> 等待生成。", buttons=["copy"])
+    replies_state = gr.State([])
+    rw_idx, rw_style, rw_btn = rewrite_row("不满意哪条？选中后按要求改写")
     replies_plain_tb = gr.Textbox(label="纯文本（点右上角图标一键复制）", lines=5, buttons=["copy"])
+
+    def _view(rs):
+        return (render_replies(rs), replies_plain(rs), rs,
+                gr.update(choices=index_choices(rs, "style"), value=None))
+
+    R_VIEW = [replies_md, replies_plain_tb, replies_state, rw_idx]
+    R_LOCK = [reply_btn, rw_btn]
 
     @safe
     def gen(cid, msg, sts, p, k, m, px, progress=gr.Progress()):
         progress(0.2, desc="生成中…")
-        rs = services.generate_replies(cid, msg, sts, cfg_from_ui(p, k, m, px))
-        return render_replies(rs), replies_plain(rs)
+        return _view(services.generate_replies(cid, msg, sts, cfg_from_ui(p, k, m, px)))
 
-    click_locked(reply_btn.click, gen, [customer_dd, incoming, styles, prov, key, model, proxy],
-                 [replies_md, replies_plain_tb], [reply_btn])
+    @safe
+    def rewrite(cid, rs, idx, style, p, k, m, px, progress=gr.Progress()):
+        if idx is None or not rs:
+            raise gr.Error("请先生成回复并选择要改写的那条。")
+        progress(0.3, desc="改写中…")
+        rs = [dict(r) for r in rs]
+        rs[int(idx)]["reply"] = services.rewrite_text(cid, rs[int(idx)].get("reply", ""), style, cfg_from_ui(p, k, m, px))
+        rs[int(idx)]["style"] = f"{rs[int(idx)].get('style', '')}（{style}）"
+        return _view(rs)
+
+    click_locked(reply_btn.click, gen, [customer_dd, incoming, styles, prov, key, model, proxy], R_VIEW, R_LOCK)
+    click_locked(rw_btn.click, rewrite, [customer_dd, replies_state, rw_idx, rw_style, prov, key, model, proxy],
+                 R_VIEW, R_LOCK)
 
     gr.Markdown("---\n### 对话模拟\n「AI 扮演客户」用于练习沟通；「AI 做我的助手」帮你想怎么说。对话历史按客户保存。")
     mode = gr.Radio(list(MODES), value=list(MODES)[0], label="模式")

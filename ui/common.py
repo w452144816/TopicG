@@ -81,6 +81,43 @@ def delete_dropdown() -> gr.Dropdown:
     return gr.Dropdown(label="选择要删除的材料", choices=[], value=None, interactive=True, scale=3)
 
 
+REWRITE_STYLES = ["更正式", "更简短", "更亲切", "加点幽默", "加几个表情", "去掉表情", "更直接地推进业务", "更委婉"]
+
+
+def rewrite_row(label: str = "改写第几条") -> tuple[gr.Dropdown, gr.Dropdown, gr.Button]:
+    """「改写第 N 条 / 改写要求 / 改写」一行，供话题页与回复页复用。"""
+    with gr.Row():
+        idx = gr.Dropdown(label=label, choices=[], value=None, interactive=True, scale=3)
+        style = gr.Dropdown(label="改写要求（可自己输入，如「提一下下周的展会」）", choices=REWRITE_STYLES,
+                            value=REWRITE_STYLES[0], allow_custom_value=True, interactive=True, scale=3)
+        btn = gr.Button("✏️ 改写这条", scale=0, min_width=110)
+    return idx, style, btn
+
+
+def index_choices(items: list[dict[str, Any]], key: str, n: int = 24) -> list[tuple[str, int]]:
+    return [(f"{i + 1}. {str(x.get(key, ''))[:n]}", i) for i, x in enumerate(items or [])]
+
+
+def profile_editor(label: str = "画像 JSON（可直接修改后点保存）") -> tuple[gr.Code, gr.Button]:
+    code = gr.Code(language="json", label=label, interactive=True, lines=18, wrap_lines=True,
+                   show_line_numbers=False, buttons=["copy"])
+    btn = gr.Button("💾 保存我改过的画像", scale=0)
+    return code, btn
+
+
+def profile_dumps(p: Any) -> str:
+    import json
+    return json.dumps(p or {}, ensure_ascii=False, indent=2)
+
+
+def profile_loads(text: str) -> Any:
+    import json
+    try:
+        return json.loads(text or "")
+    except json.JSONDecodeError as e:
+        raise gr.Error(f"JSON 格式错误（第 {e.lineno} 行第 {e.colno} 列）：{e.msg}。请检查引号、逗号是否配对。", duration=10)
+
+
 def refresh_button() -> gr.Button:
     """各模块右上角的小刷新按钮；点击后由 app.py 统一触发全局刷新。"""
     return gr.Button("🔄 刷新", size="sm", scale=0, min_width=90)
@@ -150,7 +187,8 @@ def render_topics(topics: list[dict[str, Any]]) -> str:
         return "> 暂无话题。"
     out = []
     for i, t in enumerate(topics, 1):
-        out.append(f"""### {i}. {t.get('title', '')}
+        tag = f"　`已改写：{t['rewritten']}`" if t.get("rewritten") else ""
+        out.append(f"""### {i}. {t.get('title', '')}{tag}
 **开场白**：{t.get('opening_line', '')}
 
 - **为什么合适**：{t.get('why', '')}

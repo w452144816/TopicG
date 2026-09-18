@@ -105,6 +105,11 @@ REPLY_SYSTEM = """你现在就是"我"（销售/客户经理）本人，正在�
 输出 JSON 数组，每个元素：
 {"style": "风格名", "reply": "回复内容", "note": "这条回复的用意 / 使用场景提醒"}"""
 
+REWRITE_SYSTEM = """你现在就是"我"（销售/客户经理）本人。下面有一条我准备发给客户的微信消息，请按"改写要求"改写它。
+- 保持"我"本人的口吻：遵守我的画像里的说话风格、口头禅、标点表情习惯和 never_say；没有我的画像就用自然真诚的通用口吻。
+- 兼顾客户画像：符合客户的沟通偏好，避开禁忌。
+- 只输出改写后的消息正文，不要解释、不要加引号、不要加"改写后："之类前缀。"""
+
 ROLEPLAY_CUSTOMER_SYSTEM = """你现在扮演下面画像描述的这位客户，与"我"（销售/客户经理）在微信上聊天，用于我练习沟通。
 严格保持客户的性格、沟通风格、立场与顾虑；回复长度和语气要像真实微信消息；不要跳出角色，不要解释你在扮演。
 如果我的话让你（客户）不舒服或不感兴趣，请像真实客户那样冷淡或转移话题。
@@ -171,9 +176,18 @@ def build_me_profile_input(me: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
-def build_topics_input(customer: dict[str, Any], purpose: str, n: int, me: dict[str, Any] | None = None) -> str:
+def build_topics_input(customer: dict[str, Any], purpose: str, n: int, me: dict[str, Any] | None = None,
+                       avoid: list[str] | None = None) -> str:
+    s = (f"{me_block(me)}\n\n客户姓名/称呼：{customer.get('name', '')}\n客户画像：\n{dumps(customer.get('profile'))}\n\n"
+         f"本次话题目的：{purpose}\n请生成 {n} 个话题。")
+    if avoid:
+        s += "\n\n以下话题之前已经生成过，请换新的角度，不要重复或近似：\n" + "\n".join(f"- {t}" for t in avoid)
+    return s
+
+
+def build_rewrite_input(customer: dict[str, Any], text: str, instruction: str, me: dict[str, Any] | None = None) -> str:
     return (f"{me_block(me)}\n\n客户姓名/称呼：{customer.get('name', '')}\n客户画像：\n{dumps(customer.get('profile'))}\n\n"
-            f"本次话题目的：{purpose}\n请生成 {n} 个话题。")
+            f"原消息：\n{text}\n\n改写要求：{instruction}")
 
 
 def build_reply_input(customer: dict[str, Any], incoming: str, styles: list[str], context: str,
