@@ -40,10 +40,10 @@ def build(shared: dict) -> tuple[list, callable]:
         if not name.strip():
             raise gr.Error("请输入客户姓名。")
         c = storage.create(name, tags.replace("，", ",").split(","))
-        gr.Info(f"已新增客户「{c['name']}」")
-        return table_rows(), customer_dropdown_update(c["id"]), "", ""
+        gr.Info(f"已新增客户「{c['name']}」，已切换到资料录入页")
+        return table_rows(), customer_dropdown_update(c["id"]), "", "", gr.Tabs(selected="intake")
 
-    ev_add = add_btn.click(add, [name_in, tags_in], [table, customer_dd, name_in, tags_in])
+    ev_add = add_btn.click(add, [name_in, tags_in], [table, customer_dd, name_in, tags_in, shared["tabs"]])
 
     @safe
     def delete(cid, ok):

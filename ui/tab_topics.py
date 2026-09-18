@@ -5,7 +5,7 @@ import gradio as gr
 
 import services
 import storage
-from ui.common import cfg_from_ui, refresh_button, render_topics, safe, topics_plain
+from ui.common import cfg_from_ui, click_locked, refresh_button, render_topics, safe, topics_plain
 
 PURPOSES = ["日常维护 / 刷存在感", "破冰 / 重新建立联系", "推进业务 / 促成合作", "节日 / 纪念日问候",
             "跟进上次聊到的事", "试探需求"]
@@ -31,8 +31,8 @@ def build(shared: dict) -> tuple[list, callable]:
         purpose = gr.Dropdown(PURPOSES, value=PURPOSES[0], label="话题目的", allow_custom_value=True)
         n = gr.Slider(1, 10, value=5, step=1, label="数量")
         btn = gr.Button("💡 生成话题", variant="primary")
-    topics_md = gr.Markdown("> 点击生成。")
-    plain = gr.Textbox(label="纯文本（便于复制）", lines=6)
+    topics_md = gr.Markdown("> 点击生成。", buttons=["copy"])
+    plain = gr.Textbox(label="纯文本（点右上角图标一键复制）", lines=6, buttons=["copy"])
     with gr.Accordion("历史生成记录", open=False):
         history_md = gr.Markdown(_history_md(None))
 
@@ -42,7 +42,8 @@ def build(shared: dict) -> tuple[list, callable]:
         topics = services.generate_topics(cid, pur, int(num), cfg_from_ui(p, k, m, px))
         return render_topics(topics), topics_plain(topics), _history_md(storage.load(cid))
 
-    ev_run = btn.click(run, [customer_dd, purpose, n, prov, key, model, proxy], [topics_md, plain, history_md])
+    ev_run = click_locked(btn.click, run, [customer_dd, purpose, n, prov, key, model, proxy],
+                          [topics_md, plain, history_md], [btn])
 
     def refresh(cid):
         c = storage.load(cid) if cid else None

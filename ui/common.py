@@ -31,6 +31,56 @@ def safe(fn: Callable) -> Callable:
     return wrapper
 
 
+def click_locked(trigger: Callable, fn: Callable, inputs: list, outputs: list, lock: list):
+    """注册事件：执行 fn 期间把 lock 里的按钮置灰，结束（包括报错）后恢复。
+
+    trigger 是 btn.click / textbox.submit 这类方法；fn 的返回值按 outputs 顺序对应。
+    返回事件对象，可继续 .then()。
+    """
+    outputs, lock = list(outputs), list(lock)
+
+    @functools.wraps(fn)
+    def gen(*a, **kw):
+        yield {b: gr.Button(interactive=False) for b in lock}
+        err, res = None, None
+        try:
+            res = fn(*a, **kw)
+        except Exception as e:  # noqa: BLE001
+            err = e
+        out = {b: gr.Button(interactive=True) for b in lock}
+        if err is not None:
+            yield out
+            raise err
+        if not isinstance(res, (tuple, list)):
+            res = (res,)
+        out.update(dict(zip(outputs, res)))
+        yield out
+
+    return trigger(gen, inputs, outputs + lock)
+
+
+def input_choices(items: list[dict[str, Any]] | None, quote_key: str = "key_quotes") -> list[tuple[str, int]]:
+    """把材料列表变成删除下拉框的选项：(「3. [备注] 09-18 13:25 摘要…」, 3)。"""
+    out = []
+    for i, item in enumerate(items or [], 1):
+        t = item.get("added_at", "")[5:16]
+        if item.get("type") == "note":
+            kind, summary = "备注", item.get("content", "")
+        else:
+            kind = "图片" if item.get("type") == "image" else "文本"
+            ex = item.get("extracted") or {}
+            summary = ex.get("source_summary") or " / ".join((ex.get(quote_key) or [])[:1]) if isinstance(ex, dict) else ""
+        summary = (summary or "").replace("\n", " ")
+        if len(summary) > 30:
+            summary = summary[:30] + "…"
+        out.append((f"{i}. [{kind}] {t} {summary}", i))
+    return out
+
+
+def delete_dropdown() -> gr.Dropdown:
+    return gr.Dropdown(label="选择要删除的材料", choices=[], value=None, interactive=True, scale=3)
+
+
 def refresh_button() -> gr.Button:
     """各模块右上角的小刷新按钮；点击后由 app.py 统一触发全局刷新。"""
     return gr.Button("🔄 刷新", size="sm", scale=0, min_width=90)

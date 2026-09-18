@@ -5,7 +5,7 @@ import gradio as gr
 
 import services
 import storage
-from ui.common import cfg_from_ui, refresh_button, render_replies, replies_plain, safe
+from ui.common import cfg_from_ui, click_locked, refresh_button, render_replies, replies_plain, safe
 
 STYLES = ["正式", "亲切", "幽默", "简短", "推进业务"]
 MODES = {"AI 扮演客户（陪练）": "customer", "AI 做我的助手（出主意）": "assistant"}
@@ -28,8 +28,8 @@ def build(shared: dict) -> tuple[list, callable]:
         with gr.Column(scale=2):
             styles = gr.CheckboxGroup(STYLES, value=["正式", "亲切", "幽默"], label="回复风格")
             reply_btn = gr.Button("✉️ 生成回复", variant="primary")
-    replies_md = gr.Markdown("> 等待生成。")
-    replies_plain_tb = gr.Textbox(label="纯文本（便于复制）", lines=5)
+    replies_md = gr.Markdown("> 等待生成。", buttons=["copy"])
+    replies_plain_tb = gr.Textbox(label="纯文本（点右上角图标一键复制）", lines=5, buttons=["copy"])
 
     @safe
     def gen(cid, msg, sts, p, k, m, px, progress=gr.Progress()):
@@ -37,7 +37,8 @@ def build(shared: dict) -> tuple[list, callable]:
         rs = services.generate_replies(cid, msg, sts, cfg_from_ui(p, k, m, px))
         return render_replies(rs), replies_plain(rs)
 
-    reply_btn.click(gen, [customer_dd, incoming, styles, prov, key, model, proxy], [replies_md, replies_plain_tb])
+    click_locked(reply_btn.click, gen, [customer_dd, incoming, styles, prov, key, model, proxy],
+                 [replies_md, replies_plain_tb], [reply_btn])
 
     gr.Markdown("---\n### 对话模拟\n「AI 扮演客户」用于练习沟通；「AI 做我的助手」帮你想怎么说。对话历史按客户保存。")
     mode = gr.Radio(list(MODES), value=list(MODES)[0], label="模式")
@@ -52,7 +53,7 @@ def build(shared: dict) -> tuple[list, callable]:
         hist = services.roleplay_turn(cid, MODES[mode_label], text, cfg_from_ui(p, k, m, px))
         return [{"role": h["role"], "content": h["content"]} for h in hist], ""
 
-    events = [trigger(turn, [customer_dd, mode, msg, prov, key, model, proxy], [chatbot, msg])
+    events = [click_locked(trigger, turn, [customer_dd, mode, msg, prov, key, model, proxy], [chatbot, msg], [send])
               for trigger in (send.click, msg.submit)]
 
     @safe

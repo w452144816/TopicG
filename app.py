@@ -53,11 +53,13 @@ def build() -> gr.Blocks:
                   "proxy": use_proxy}
 
         tabs = []
-        with gr.Tabs():
-            for title, mod in [("📖 使用说明", tab_guide), ("🙋 我的建模", tab_me), ("👥 客户管理", tab_customers),
-                               ("📥 资料录入", tab_intake), ("🧠 分析页", tab_analysis),
-                               ("💡 话题生成", tab_topics), ("💬 聊天回复", tab_chat)]:
-                with gr.Tab(title):
+        with gr.Tabs() as tabs_comp:
+            shared["tabs"] = tabs_comp  # 供各页切换标签页（如新增客户后跳到资料录入）
+            for tid, title, mod in [("guide", "📖 使用说明", tab_guide), ("me", "🙋 我的建模", tab_me),
+                                    ("customers", "👥 客户管理", tab_customers), ("intake", "📥 资料录入", tab_intake),
+                                    ("analysis", "🧠 分析页", tab_analysis), ("topics", "💡 话题生成", tab_topics),
+                                    ("chat", "💬 聊天回复", tab_chat)]:
+                with gr.Tab(title, id=tid):
                     tabs.append(mod.build(shared))
 
         all_outputs = [o for outs, _, _ in tabs for o in outs]

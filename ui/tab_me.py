@@ -8,7 +8,7 @@ import gradio as gr
 import ingest
 import services
 import storage
-from ui.common import _li, cfg_from_ui, refresh_button, safe
+from ui.common import _li, cfg_from_ui, click_locked, delete_dropdown, input_choices, refresh_button, safe
 
 
 def render_me(me: dict[str, Any]) -> str:
@@ -105,21 +105,25 @@ def build(shared: dict) -> tuple[list, callable]:
     with gr.Row():
         with gr.Column(scale=3):
             gr.Markdown("#### 我的画像")
-            profile_md = gr.Markdown(render_me(me))
+            profile_md = gr.Markdown(render_me(me), buttons=["copy"])
             with gr.Accordion("原始画像 JSON", open=False):
                 profile_json = gr.JSON(value=me.get("profile"))
         with gr.Column(scale=2):
             gr.Markdown("#### 已录入的材料")
             inputs_md = gr.Markdown(render_me_inputs(me))
             with gr.Row():
-                del_idx = gr.Number(label="删除第几条材料（序号）", precision=0, value=None, scale=2)
-                del_btn = gr.Button("删除该条", scale=1)
+                del_sel = delete_dropdown()
+                del_btn = gr.Button("删除该条", scale=0)
             confirm = gr.Checkbox(label="我确认清空全部材料与画像", value=False)
             reset_btn = gr.Button("🗑 清空我的建模", variant="stop")
 
     def _all():
         m = storage.load_me()
-        return render_me(m), m.get("profile"), render_me_inputs(m)
+        return (render_me(m), m.get("profile"), render_me_inputs(m),
+                gr.update(choices=input_choices(m.get("raw_inputs"), "my_quotes"), value=None))
+
+    ALL = [profile_md, profile_json, inputs_md, del_sel]
+    LOCK = [btn, rebuild, note_btn]
 
     @safe
     def do_save_basic(n, r):
@@ -127,12 +131,12 @@ def build(shared: dict) -> tuple[list, callable]:
         gr.Info("已保存")
         return _all()
 
-    ev_save = save_basic.click(do_save_basic, [name_in, role_in], [profile_md, profile_json, inputs_md])
+    ev_save = save_basic.click(do_save_basic, [name_in, role_in], ALL)
 
     @safe
     def run(fs, hint_txt, txt, do_auto, p, k, m, px, progress=gr.Progress()):
         cfg = cfg_from_ui(p, k, m, px)
-        progress(0.1, desc="分析材料中…")
+        progress(0.1, desc="分析材料中…（多张截图约需 30 到 60 秒）")
         added = services.me_intake(txt, fs or [], cfg, hint_txt or "")
         if do_auto:
             progress(0.7, desc="建模中…")
@@ -140,8 +144,8 @@ def build(shared: dict) -> tuple[list, callable]:
         gr.Info(f"已录入 {len(added)} 条材料" + ("，画像已更新" if do_auto else ""))
         return ([a["extracted"] for a in added], *_all(), None, "")
 
-    ev_run = btn.click(run, [files, hint, text, auto, prov, key, model, proxy],
-              [result, profile_md, profile_json, inputs_md, files, text])
+    ev_run = click_locked(btn.click, run, [files, hint, text, auto, prov, key, model, proxy],
+                          [result, *ALL, files, text], LOCK)
 
     @safe
     def do_note(txt, do_auto, p, k, m, px, progress=gr.Progress()):
@@ -152,7 +156,7 @@ def build(shared: dict) -> tuple[list, callable]:
         gr.Info("备注已追加" + ("，画像已更新" if do_auto else ""))
         return (*_all(), "")
 
-    ev_note = note_btn.click(do_note, [note, auto, prov, key, model, proxy], [profile_md, profile_json, inputs_md, note])
+    ev_note = click_locked(note_btn.click, do_note, [note, auto, prov, key, model, proxy], [*ALL, note], LOCK)
 
     @safe
     def do_rebuild(p, k, m, px, progress=gr.Progress()):
@@ -161,17 +165,17 @@ def build(shared: dict) -> tuple[list, callable]:
         gr.Info("画像已更新")
         return _all()
 
-    ev_rebuild = rebuild.click(do_rebuild, [prov, key, model, proxy], [profile_md, profile_json, inputs_md])
+    ev_rebuild = click_locked(rebuild.click, do_rebuild, [prov, key, model, proxy], ALL, LOCK)
 
     @safe
     def do_del(idx):
         if not idx:
-            raise gr.Error("请输入要删除的材料序号。")
+            raise gr.Error("请先在下拉框里选择要删除的材料。")
         services.me_remove_input(int(idx) - 1)
         gr.Info("已删除，建议重新建模")
         return _all()
 
-    ev_del = del_btn.click(do_del, [del_idx], [profile_md, profile_json, inputs_md])
+    ev_del = del_btn.click(do_del, [del_sel], ALL)
 
     @safe
     def do_reset(ok):
@@ -181,10 +185,10 @@ def build(shared: dict) -> tuple[list, callable]:
         gr.Info("已清空")
         return (*_all(), False)
 
-    ev_reset = reset_btn.click(do_reset, [confirm], [profile_md, profile_json, inputs_md, confirm])
+    ev_reset = reset_btn.click(do_reset, [confirm], [*ALL, confirm])
 
     def refresh(_cid):
         return _all()
 
     events = [ev_save, ev_run, ev_note, ev_rebuild, ev_del, ev_reset, refresh_btn.click(lambda: None)]
-    return [profile_md, profile_json, inputs_md], refresh, events
+    return ALL, refresh, events

@@ -5,7 +5,7 @@ import gradio as gr
 
 import services
 import storage
-from ui.common import cfg_from_ui, refresh_button, render_profile, safe
+from ui.common import cfg_from_ui, click_locked, refresh_button, render_profile, safe
 
 
 def build(shared: dict) -> tuple[list, callable]:
@@ -15,7 +15,7 @@ def build(shared: dict) -> tuple[list, callable]:
         gr.Markdown("### 客户画像")
         btn = gr.Button("🧠 重新分析画像", variant="primary", scale=0)
         refresh_btn = refresh_button()
-    profile_md = gr.Markdown(render_profile(None))
+    profile_md = gr.Markdown(render_profile(None), buttons=["copy"])
     with gr.Accordion("原始画像 JSON", open=False):
         profile_json = gr.JSON()
 
@@ -27,7 +27,7 @@ def build(shared: dict) -> tuple[list, callable]:
         gr.Info("画像已更新")
         return render_profile(c), c["profile"]
 
-    ev_run = btn.click(run, [customer_dd, prov, key, model, proxy], [profile_md, profile_json])
+    ev_run = click_locked(btn.click, run, [customer_dd, prov, key, model, proxy], [profile_md, profile_json], [btn])
 
     def refresh(cid):
         c = storage.load(cid) if cid else None
