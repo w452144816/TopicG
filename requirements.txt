@@ -1,5 +1,6 @@
-# 直接依赖（已在 Python 3.13 / Windows 11 上验证）
-# 完整锁定版本见 requirements.lock.txt，需要 100% 复现环境时用它安装
+# Direct dependencies, pinned. Verified on Python 3.13 / Windows 11.
+# For an exact reproduction of the whole environment use requirements.lock.txt.
+# (ASCII only: pip may read this file with a non-UTF-8 locale codec on Windows.)
 gradio==6.27.0
 anthropic==1.6.0
 python-dotenv==1.2.3
