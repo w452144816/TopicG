@@ -5,7 +5,7 @@ import gradio as gr
 
 import services
 import storage
-from ui.common import cfg_from_ui, render_topics, safe, topics_plain
+from ui.common import cfg_from_ui, refresh_button, render_topics, safe, topics_plain
 
 PURPOSES = ["日常维护 / 刷存在感", "破冰 / 重新建立联系", "推进业务 / 促成合作", "节日 / 纪念日问候",
             "跟进上次聊到的事", "试探需求"]
@@ -24,7 +24,9 @@ def _history_md(c) -> str:
 def build(shared: dict) -> tuple[list, callable]:
     customer_dd, prov, key, model, proxy = (shared["customer"], shared["provider"], shared["key"],
                                            shared["model"], shared["proxy"])
-    gr.Markdown("### 话题生成\n基于客户画像，生成可直接发送的开场白。")
+    with gr.Row():
+        gr.Markdown("### 话题生成\n基于客户画像，生成可直接发送的开场白。")
+        refresh_btn = refresh_button()
     with gr.Row():
         purpose = gr.Dropdown(PURPOSES, value=PURPOSES[0], label="话题目的", allow_custom_value=True)
         n = gr.Slider(1, 10, value=5, step=1, label="数量")
@@ -40,11 +42,12 @@ def build(shared: dict) -> tuple[list, callable]:
         topics = services.generate_topics(cid, pur, int(num), cfg_from_ui(p, k, m, px))
         return render_topics(topics), topics_plain(topics), _history_md(storage.load(cid))
 
-    btn.click(run, [customer_dd, purpose, n, prov, key, model, proxy], [topics_md, plain, history_md])
+    ev_run = btn.click(run, [customer_dd, purpose, n, prov, key, model, proxy], [topics_md, plain, history_md])
 
     def refresh(cid):
         c = storage.load(cid) if cid else None
         latest = c["topics_history"][0]["topics"] if c and c.get("topics_history") else []
         return (render_topics(latest) if latest else "> 点击生成。", topics_plain(latest), _history_md(c))
 
-    return [topics_md, plain, history_md], refresh
+    events = [ev_run, refresh_btn.click(lambda: None)]
+    return [topics_md, plain, history_md], refresh, events

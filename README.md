@@ -47,6 +47,20 @@ copy .env.example .env
 
 实际地址看启动日志的 `Running on local URL`。
 
+### 开发模式（改代码自动生效）
+
+```powershell
+.\dev.ps1               # Windows，默认 7860 端口；.\dev.ps1 -Port 8000 指定端口
+./dev.sh                # macOS / Linux
+```
+
+用 Gradio 自带的 reload 模式启动：保存 `app.py`、`ui/*.py`、`services.py`、`storage.py` 等任意 `.py` 文件后，浏览器页面会自动重载出新代码，不用手动重启。仅用于开发调试；正式使用仍用 `python app.py`。`.env` 只在启动时读取一次，改 Key / 代理仍需重启。
+
+### 页面数据刷新
+
+- 录入 / 分析 / 生成话题 / 对话 / 增删客户等任何会改动数据的操作完成后，所有页面的展示（客户表格、画像、材料列表、我的建模等）会**自动刷新**，不需要 F5。
+- 每个模块右上角有 🔄 小按钮可手动重读该数据；顶部「当前客户」旁的「🔄 刷新全部」会连客户列表一起重读（例如手工往 `data/customers/` 拷了 JSON 之后）。
+
 ## 页面说明
 
 | Tab | 作用 |

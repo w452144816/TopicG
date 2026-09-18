@@ -8,7 +8,7 @@ import gradio as gr
 import ingest
 import services
 import storage
-from ui.common import _li, cfg_from_ui, safe
+from ui.common import _li, cfg_from_ui, refresh_button, safe
 
 
 def render_me(me: dict[str, Any]) -> str:
@@ -73,8 +73,10 @@ def build(shared: dict) -> tuple[list, callable]:
     prov, key, model, proxy = shared["provider"], shared["key"], shared["model"], shared["proxy"]
     me = storage.load_me()
 
-    gr.Markdown("### 我的建模\n把**你自己**的聊天截图、朋友圈、自我描述录进来，AI 会建立你的人格与说话风格画像。"
-                "之后「聊天回复」「话题开场白」「对话助手」都会用**你本人的口吻和心态**来写，而不是通用客服腔。")
+    with gr.Row():
+        gr.Markdown("### 我的建模\n把**你自己**的聊天截图、朋友圈、自我描述录进来，AI 会建立你的人格与说话风格画像。"
+                    "之后「聊天回复」「话题开场白」「对话助手」都会用**你本人的口吻和心态**来写，而不是通用客服腔。")
+        refresh_btn = refresh_button()
     with gr.Row():
         name_in = gr.Textbox(label="我的称呼", value=me.get("name", ""), placeholder="例如：小王、Wang", scale=1)
         role_in = gr.Textbox(label="我的身份 / 岗位", value=me.get("role", ""),
@@ -125,7 +127,7 @@ def build(shared: dict) -> tuple[list, callable]:
         gr.Info("已保存")
         return _all()
 
-    save_basic.click(do_save_basic, [name_in, role_in], [profile_md, profile_json, inputs_md])
+    ev_save = save_basic.click(do_save_basic, [name_in, role_in], [profile_md, profile_json, inputs_md])
 
     @safe
     def run(fs, hint_txt, txt, do_auto, p, k, m, px, progress=gr.Progress()):
@@ -138,7 +140,7 @@ def build(shared: dict) -> tuple[list, callable]:
         gr.Info(f"已录入 {len(added)} 条材料" + ("，画像已更新" if do_auto else ""))
         return ([a["extracted"] for a in added], *_all(), None, "")
 
-    btn.click(run, [files, hint, text, auto, prov, key, model, proxy],
+    ev_run = btn.click(run, [files, hint, text, auto, prov, key, model, proxy],
               [result, profile_md, profile_json, inputs_md, files, text])
 
     @safe
@@ -150,7 +152,7 @@ def build(shared: dict) -> tuple[list, callable]:
         gr.Info("备注已追加" + ("，画像已更新" if do_auto else ""))
         return (*_all(), "")
 
-    note_btn.click(do_note, [note, auto, prov, key, model, proxy], [profile_md, profile_json, inputs_md, note])
+    ev_note = note_btn.click(do_note, [note, auto, prov, key, model, proxy], [profile_md, profile_json, inputs_md, note])
 
     @safe
     def do_rebuild(p, k, m, px, progress=gr.Progress()):
@@ -159,7 +161,7 @@ def build(shared: dict) -> tuple[list, callable]:
         gr.Info("画像已更新")
         return _all()
 
-    rebuild.click(do_rebuild, [prov, key, model, proxy], [profile_md, profile_json, inputs_md])
+    ev_rebuild = rebuild.click(do_rebuild, [prov, key, model, proxy], [profile_md, profile_json, inputs_md])
 
     @safe
     def do_del(idx):
@@ -169,7 +171,7 @@ def build(shared: dict) -> tuple[list, callable]:
         gr.Info("已删除，建议重新建模")
         return _all()
 
-    del_btn.click(do_del, [del_idx], [profile_md, profile_json, inputs_md])
+    ev_del = del_btn.click(do_del, [del_idx], [profile_md, profile_json, inputs_md])
 
     @safe
     def do_reset(ok):
@@ -179,9 +181,10 @@ def build(shared: dict) -> tuple[list, callable]:
         gr.Info("已清空")
         return (*_all(), False)
 
-    reset_btn.click(do_reset, [confirm], [profile_md, profile_json, inputs_md, confirm])
+    ev_reset = reset_btn.click(do_reset, [confirm], [profile_md, profile_json, inputs_md, confirm])
 
     def refresh(_cid):
-        return ()
+        return _all()
 
-    return [], refresh
+    events = [ev_save, ev_run, ev_note, ev_rebuild, ev_del, ev_reset, refresh_btn.click(lambda: None)]
+    return [profile_md, profile_json, inputs_md], refresh, events

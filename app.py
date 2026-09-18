@@ -37,6 +37,7 @@ def build() -> gr.Blocks:
                                 label="AI 引擎", scale=1)
             customer = gr.Dropdown(choices=storage.choices(), label="当前客户",
                                    value=(storage.choices() or [(None, None)])[0][1], scale=2)
+            refresh_all_btn = gr.Button("🔄 刷新全部", scale=0, min_width=110)
         with gr.Accordion("引擎高级设置（临时覆盖，不落盘）", open=False):
             with gr.Row():
                 key_override = gr.Textbox(label="API Key 覆盖", type="password", placeholder="留空则用 .env")
@@ -59,18 +60,31 @@ def build() -> gr.Blocks:
                 with gr.Tab(title):
                     tabs.append(mod.build(shared))
 
-        all_outputs = [o for outs, _ in tabs for o in outs]
+        all_outputs = [o for outs, _, _ in tabs for o in outs]
 
         def refresh_all(cid):
             vals = []
-            for _, fn in tabs:
+            for _, fn, _ in tabs:
                 vals.extend(fn(cid))
             return vals
 
+        # 切换客户 / 打开页面：全局刷新
         customer.change(refresh_all, [customer], all_outputs)
         demo.load(lambda: customer_dropdown_update(None), None, [customer]).then(
             refresh_all, [customer], all_outputs)
+        # 顶部「刷新全部」：先重读客户列表（保持当前选中），再刷新所有模块
+        refresh_all_btn.click(customer_dropdown_update, [customer], [customer]).then(
+            refresh_all, [customer], all_outputs)
+        # 各模块的提交 / 分析 / 删除以及模块内的小刷新按钮完成后，自动全局刷新
+        # （refresh_all 不写 customer 下拉框，避免与 customer.change 互相触发）
+        for _, _, events in tabs:
+            for ev in events:
+                ev.then(refresh_all, [customer], all_outputs)
     return demo
+
+
+# 模块级 demo：供 `gradio app.py`（开发热重载模式，见 dev.ps1）使用
+demo = build()
 
 
 def parse_args():
@@ -87,4 +101,4 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    build().launch(server_name=args.host, server_port=args.port, share=args.share, inbrowser=args.open)
+    demo.launch(server_name=args.host, server_port=args.port, share=args.share, inbrowser=args.open)

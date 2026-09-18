@@ -6,13 +6,15 @@ import gradio as gr
 import ingest
 import services
 import storage
-from ui.common import cfg_from_ui, render_inputs, safe
+from ui.common import cfg_from_ui, refresh_button, render_inputs, safe
 
 
 def build(shared: dict) -> tuple[list, callable]:
     customer_dd, prov, key, model, proxy = (shared["customer"], shared["provider"], shared["key"],
                                            shared["model"], shared["proxy"])
-    gr.Markdown("### 录入客户资料\n上传聊天截图 / 朋友圈截图（可多张），或粘贴文字记录。AI 会提取客户信息并追加到该客户的存档。")
+    with gr.Row():
+        gr.Markdown("### 录入客户资料\n上传聊天截图 / 朋友圈截图（可多张），或粘贴文字记录。AI 会提取客户信息并追加到该客户的存档。")
+        refresh_btn = refresh_button()
     with gr.Row():
         with gr.Column():
             files = gr.File(label="文件（可多选）：截图 png/jpg/webp ｜ 文本 txt/md ｜ 表格 xlsx/csv ｜ zip 压缩包（自动解开）",
@@ -48,7 +50,7 @@ def build(shared: dict) -> tuple[list, callable]:
         gr.Info(f"已录入 {len(added)} 条材料" + ("，画像已更新" if do_auto else ""))
         return [a["extracted"] for a in added], render_inputs(storage.load(cid)), None, ""
 
-    btn.click(run, [customer_dd, files, hint, text, auto, prov, key, model, proxy],
+    ev_run = btn.click(run, [customer_dd, files, hint, text, auto, prov, key, model, proxy],
               [result, inputs_md, files, text])
 
     @safe
@@ -60,7 +62,7 @@ def build(shared: dict) -> tuple[list, callable]:
         gr.Info("备注已追加" + ("，画像已更新" if do_auto else ""))
         return render_inputs(storage.load(cid)), ""
 
-    note_btn.click(do_note, [customer_dd, note, auto, prov, key, model, proxy], [inputs_md, note])
+    ev_note = note_btn.click(do_note, [customer_dd, note, auto, prov, key, model, proxy], [inputs_md, note])
 
     @safe
     def do_del(cid, idx):
@@ -70,9 +72,10 @@ def build(shared: dict) -> tuple[list, callable]:
         gr.Info("已删除，建议重新分析画像")
         return render_inputs(storage.load(cid)), None
 
-    del_btn.click(do_del, [customer_dd, del_idx], [inputs_md, del_idx])
+    ev_del = del_btn.click(do_del, [customer_dd, del_idx], [inputs_md, del_idx])
 
     def refresh(cid):
         return (render_inputs(storage.load(cid) if cid else None),)
 
-    return [inputs_md], refresh
+    events = [ev_run, ev_note, ev_del, refresh_btn.click(lambda: None)]
+    return [inputs_md], refresh, events

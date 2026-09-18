@@ -31,6 +31,11 @@ def safe(fn: Callable) -> Callable:
     return wrapper
 
 
+def refresh_button() -> gr.Button:
+    """各模块右上角的小刷新按钮；点击后由 app.py 统一触发全局刷新。"""
+    return gr.Button("🔄 刷新", size="sm", scale=0, min_width=90)
+
+
 def customer_dropdown_update(selected: str | None = None) -> dict:
     ch = storage.choices()
     ids = [v for _, v in ch]

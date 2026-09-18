@@ -5,7 +5,7 @@ import gradio as gr
 
 import services
 import storage
-from ui.common import cfg_from_ui, render_replies, replies_plain, safe
+from ui.common import cfg_from_ui, refresh_button, render_replies, replies_plain, safe
 
 STYLES = ["正式", "亲切", "幽默", "简短", "推进业务"]
 MODES = {"AI 扮演客户（陪练）": "customer", "AI 做我的助手（出主意）": "assistant"}
@@ -19,8 +19,10 @@ def build(shared: dict) -> tuple[list, callable]:
     customer_dd, prov, key, model, proxy = (shared["customer"], shared["provider"], shared["key"],
                                            shared["model"], shared["proxy"])
 
-    gr.Markdown("### 候选回复\n粘贴客户刚发来的消息，AI 以**你本人**的口吻和心态（来自「我的建模」）生成多种风格的回复。"
-                "风格是在你本人基础上的微调，不会变成另一个人。未建模时使用通用口吻。")
+    with gr.Row():
+        gr.Markdown("### 候选回复\n粘贴客户刚发来的消息，AI 以**你本人**的口吻和心态（来自「我的建模」）生成多种风格的回复。"
+                    "风格是在你本人基础上的微调，不会变成另一个人。未建模时使用通用口吻。")
+        refresh_btn = refresh_button()
     with gr.Row():
         incoming = gr.Textbox(label="客户发来的消息", lines=3, scale=3)
         with gr.Column(scale=2):
@@ -50,17 +52,18 @@ def build(shared: dict) -> tuple[list, callable]:
         hist = services.roleplay_turn(cid, MODES[mode_label], text, cfg_from_ui(p, k, m, px))
         return [{"role": h["role"], "content": h["content"]} for h in hist], ""
 
-    for trigger in (send.click, msg.submit):
-        trigger(turn, [customer_dd, mode, msg, prov, key, model, proxy], [chatbot, msg])
+    events = [trigger(turn, [customer_dd, mode, msg, prov, key, model, proxy], [chatbot, msg])
+              for trigger in (send.click, msg.submit)]
 
     @safe
     def do_clear(cid):
         services.clear_chat(cid)
         return []
 
-    clear.click(do_clear, [customer_dd], [chatbot])
+    ev_clear = clear.click(do_clear, [customer_dd], [chatbot])
 
     def refresh(cid):
         return (_history(storage.load(cid) if cid else None),)
 
-    return [chatbot], refresh
+    events += [ev_clear, refresh_btn.click(lambda: None)]
+    return [chatbot], refresh, events

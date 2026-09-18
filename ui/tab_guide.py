@@ -167,4 +167,4 @@ def build(shared: dict) -> tuple[list, callable]:
     def refresh(_cid):
         return ()
 
-    return [], refresh
+    return [], refresh, []
