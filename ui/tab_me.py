@@ -5,6 +5,7 @@ from typing import Any
 
 import gradio as gr
 
+import ingest
 import services
 import storage
 from ui.common import _li, cfg_from_ui, safe
@@ -82,7 +83,8 @@ def build(shared: dict) -> tuple[list, callable]:
 
     with gr.Row():
         with gr.Column():
-            files = gr.File(label="我的聊天截图（可多选）", file_count="multiple", file_types=["image"], type="filepath")
+            files = gr.File(label="我的文件（可多选）：聊天截图 ｜ 文本 txt/md ｜ 表格 xlsx/csv ｜ zip 压缩包（自动解开）",
+                            file_count="multiple", file_types=ingest.ACCEPTED_EXT, type="filepath")
             hint = gr.Textbox(label="补充说明（可选）", placeholder="例如：截图里右侧绿色气泡是我；或：这是我和老客户的对话，比较随意")
         with gr.Column():
             text = gr.Textbox(label="我的自述 / 我说过的话（可选）", lines=12,

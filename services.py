@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 import ai_engine as ai
+import ingest
 import prompts
 import storage
 from config import ProviderConfig
@@ -39,17 +40,24 @@ def intake(cid: str, text: str, image_files: list[str], provider: ProviderConfig
     c = _require(cid)
     hint = f"客户是「{c['name']}」。{customer_hint}".strip()
     added: list[dict[str, Any]] = []
-    for f in image_files or []:
-        saved = storage.save_image(cid, f)
-        extracted = ai.chat_json(provider, prompts.EXTRACT_SYSTEM,
-                                 f"{hint}\n请从这张截图中提取客户信息。", image_paths=[saved])
-        added.append({"type": "image", "content": saved, "extracted": extracted,
-                      "added_at": storage.now(), "provider": provider.label})
+    try:
+        materials = ingest.expand_uploads(image_files or [], storage.DATA_DIR / cid / "uploads")
+    except ingest.IngestError as e:
+        raise ai.AIError(str(e)) from e
     if text and text.strip():
-        extracted = ai.chat_json(provider, prompts.EXTRACT_SYSTEM,
-                                 f"{hint}\n请从下面的文字记录中提取客户信息：\n\n{text.strip()}")
-        added.append({"type": "text", "content": text.strip(), "extracted": extracted,
-                      "added_at": storage.now(), "provider": provider.label})
+        materials.append({"kind": "text", "content": text.strip(), "label": "粘贴文本"})
+    for m in materials:
+        if m["kind"] == "image":
+            saved = storage.save_image(cid, m["path"])
+            extracted = ai.chat_json(provider, prompts.EXTRACT_SYSTEM,
+                                     f"{hint}\n请从这张截图中提取客户信息。", image_paths=[saved])
+            added.append({"type": "image", "content": saved, "extracted": extracted,
+                          "added_at": storage.now(), "provider": provider.label})
+        else:
+            extracted = ai.chat_json(provider, prompts.EXTRACT_SYSTEM,
+                                     f"{hint}\n请从下面的文字记录（来源：{m['label']}）中提取客户信息：\n\n{m['content']}")
+            added.append({"type": "text", "content": m["content"], "label": m["label"], "extracted": extracted,
+                          "added_at": storage.now(), "provider": provider.label})
     if not added:
         raise ai.AIError("请至少上传一张图片或粘贴一段文本。")
     c["raw_inputs"].extend(added)
@@ -152,17 +160,24 @@ def me_intake(text: str, image_files: list[str], provider: ProviderConfig, hint:
     me = storage.load_me()
     who = f"使用者本人称呼：{me.get('name') or '未填'}，身份：{me.get('role') or '未填'}。{hint}".strip()
     added: list[dict[str, Any]] = []
-    for f in image_files or []:
-        saved = storage.save_me_image(f)
-        extracted = ai.chat_json(provider, prompts.ME_EXTRACT_SYSTEM,
-                                 f"{who}\n请只分析截图中「使用者本人」这一方说的话。", image_paths=[saved])
-        added.append({"type": "image", "content": saved, "extracted": extracted,
-                      "added_at": storage.now(), "provider": provider.label})
+    try:
+        materials = ingest.expand_uploads(image_files or [], storage.ME_IMG_DIR.parent / "me_uploads")
+    except ingest.IngestError as e:
+        raise ai.AIError(str(e)) from e
     if text and text.strip():
-        extracted = ai.chat_json(provider, prompts.ME_EXTRACT_SYSTEM,
-                                 f"{who}\n下面是使用者本人的聊天记录或自述文字，请分析：\n\n{text.strip()}")
-        added.append({"type": "text", "content": text.strip(), "extracted": extracted,
-                      "added_at": storage.now(), "provider": provider.label})
+        materials.append({"kind": "text", "content": text.strip(), "label": "粘贴文本"})
+    for m in materials:
+        if m["kind"] == "image":
+            saved = storage.save_me_image(m["path"])
+            extracted = ai.chat_json(provider, prompts.ME_EXTRACT_SYSTEM,
+                                     f"{who}\n请只分析截图中「使用者本人」这一方说的话。", image_paths=[saved])
+            added.append({"type": "image", "content": saved, "extracted": extracted,
+                          "added_at": storage.now(), "provider": provider.label})
+        else:
+            extracted = ai.chat_json(provider, prompts.ME_EXTRACT_SYSTEM,
+                                     f"{who}\n下面是使用者本人的聊天记录或自述文字（来源：{m['label']}），请分析：\n\n{m['content']}")
+            added.append({"type": "text", "content": m["content"], "label": m["label"], "extracted": extracted,
+                          "added_at": storage.now(), "provider": provider.label})
     if not added:
         raise ai.AIError("请至少上传一张图片或粘贴一段文本。")
     me["raw_inputs"].extend(added)

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import gradio as gr
 
+import ingest
 import services
 import storage
 from ui.common import cfg_from_ui, render_inputs, safe
@@ -14,8 +15,8 @@ def build(shared: dict) -> tuple[list, callable]:
     gr.Markdown("### 录入客户资料\n上传聊天截图 / 朋友圈截图（可多张），或粘贴文字记录。AI 会提取客户信息并追加到该客户的存档。")
     with gr.Row():
         with gr.Column():
-            files = gr.File(label="截图（png / jpg / webp，可多选）", file_count="multiple",
-                            file_types=["image"], type="filepath")
+            files = gr.File(label="文件（可多选）：截图 png/jpg/webp ｜ 文本 txt/md ｜ 表格 xlsx/csv ｜ zip 压缩包（自动解开）",
+                            file_count="multiple", file_types=ingest.ACCEPTED_EXT, type="filepath")
             hint = gr.Textbox(label="补充说明（可选）", placeholder="例如：截图里右侧绿色气泡是我，左侧是客户")
         with gr.Column():
             text = gr.Textbox(label="文字记录（可选）", lines=12,
