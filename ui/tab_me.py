@@ -90,7 +90,7 @@ def build(shared: dict) -> tuple[list, callable]:
                             file_count="multiple", file_types=ingest.ACCEPTED_EXT, type="filepath")
             hint = gr.Textbox(label="补充说明（可选）", placeholder="例如：截图里右侧绿色气泡是我；或：这是我和老客户的对话，比较随意")
         with gr.Column():
-            text = gr.Textbox(label="我的自述 / 我说过的话（可选）", lines=12,
+            text = gr.Textbox(label="我的自述 / 我说过的话（可选，Shift+Enter 直接录入）", lines=12,
                               placeholder="例如：我说话比较直接，不喜欢客套；从不催客户，宁愿慢一点；爱用『哈哈』和 ~ ；绝对不用『亲』『宝』……\n也可以直接粘贴一段你发给客户的消息。")
     with gr.Row():
         auto = gr.Checkbox(label="录入后立即更新画像（增量：在现有画像基础上补充修正）", value=True)
@@ -153,8 +153,8 @@ def build(shared: dict) -> tuple[list, callable]:
         gr.Info(f"已录入 {len(added)} 条材料" + ("，画像已更新" if do_auto else ""))
         return ([a["extracted"] for a in added], *_all(), None, "")
 
-    ev_run = click_locked(btn.click, run, [files, hint, text, auto, prov, key, model, proxy],
-                          [result, *ALL, files, text], LOCK)
+    ev_run, ev_run2 = (click_locked(trig, run, [files, hint, text, auto, prov, key, model, proxy],
+                                    [result, *ALL, files, text], LOCK) for trig in (btn.click, text.submit))
 
     @safe
     def do_note(txt, do_auto, p, k, m, px, progress=gr.Progress()):
@@ -199,5 +199,5 @@ def build(shared: dict) -> tuple[list, callable]:
     def refresh(_cid):
         return _all()
 
-    events = [ev_save, ev_save_profile, ev_run, ev_note, ev_rebuild, ev_del, ev_reset, refresh_btn.click(lambda: None)]
+    events = [ev_save, ev_save_profile, ev_run, ev_run2, ev_note, ev_rebuild, ev_del, ev_reset, refresh_btn.click(lambda: None)]
     return ALL, refresh, events

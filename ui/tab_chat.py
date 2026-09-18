@@ -25,7 +25,7 @@ def build(shared: dict) -> tuple[list, callable]:
                     "风格是在你本人基础上的微调，不会变成另一个人。未建模时使用通用口吻。")
         refresh_btn = refresh_button()
     with gr.Row():
-        incoming = gr.Textbox(label="客户发来的消息", lines=3, scale=3)
+        incoming = gr.Textbox(label="客户发来的消息（Shift+Enter 直接生成）", lines=3, scale=3)
         with gr.Column(scale=2):
             styles = gr.CheckboxGroup(STYLES, value=["正式", "亲切", "幽默"], label="回复风格")
             reply_btn = gr.Button("✉️ 生成回复", variant="primary")
@@ -56,13 +56,14 @@ def build(shared: dict) -> tuple[list, callable]:
         rs[int(idx)]["style"] = f"{rs[int(idx)].get('style', '')}（{style}）"
         return _view(rs)
 
-    click_locked(reply_btn.click, gen, [customer_dd, incoming, styles, prov, key, model, proxy], R_VIEW, R_LOCK)
+    for trig in (reply_btn.click, incoming.submit):
+        click_locked(trig, gen, [customer_dd, incoming, styles, prov, key, model, proxy], R_VIEW, R_LOCK)
     click_locked(rw_btn.click, rewrite, [customer_dd, replies_state, rw_idx, rw_style, prov, key, model, proxy],
                  R_VIEW, R_LOCK)
 
     gr.Markdown("---\n### 对话模拟\n「AI 扮演客户」用于练习沟通；「AI 做我的助手」帮你想怎么说。对话历史按客户保存。")
     mode = gr.Radio(list(MODES), value=list(MODES)[0], label="模式")
-    chatbot = gr.Chatbot(label="对话", height=420)
+    chatbot = gr.Chatbot(label="对话", height="60vh", min_height=320)
     with gr.Row():
         msg = gr.Textbox(label="我说", placeholder="输入后回车发送", scale=5)
         send = gr.Button("发送", variant="primary", scale=1)

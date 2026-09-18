@@ -20,6 +20,22 @@ from ui import tab_analysis, tab_chat, tab_customers, tab_guide, tab_intake, tab
 from ui.common import customer_dropdown_update
 
 
+# 手机 / 窄屏适配：并排的 Row 改为上下堆叠，标签页字号缩小，去掉横向滚动
+MOBILE_CSS = """
+<style>
+@media (max-width: 768px) {
+  .gradio-container { padding: 8px !important; }
+  .gradio-container .row { flex-direction: column !important; flex-wrap: wrap !important; }
+  .gradio-container .row > * { width: 100% !important; min-width: 0 !important; flex: 1 1 auto !important; }
+  .gradio-container button[role="tab"], .gradio-container .tab-nav button {
+    font-size: 13px !important; padding: 6px 8px !important; }
+  .gradio-container h1 { font-size: 1.4rem !important; }
+  .gradio-container table { display: block; overflow-x: auto; }
+}
+</style>
+"""
+
+
 def status_md(label: str, key_override: str, model_override: str, use_proxy: bool) -> str:
     from ui.common import cfg_from_ui
     cfg = cfg_from_ui(label, key_override, model_override, use_proxy)
@@ -28,8 +44,22 @@ def status_md(label: str, key_override: str, model_override: str, use_proxy: boo
     return f"**引擎**：{cfg.label} ｜ **模型**：`{cfg.model}` ｜ **地址**：`{cfg.base_url}`{via} ｜ {ok}"
 
 
+def status_short(label: str, key_override: str, model_override: str, use_proxy: bool) -> str:
+    """折叠栏标题：一行简短状态。"""
+    from ui.common import cfg_from_ui
+    cfg = cfg_from_ui(label, key_override, model_override, use_proxy)
+    ok = "✅" if cfg.ready else "❌ 未配置 Key"
+    return f"⚙️ 引擎 {cfg.label} · {cfg.model} · {'代理' if cfg.proxy else '直连'} · {ok}"
+
+
+def status_update(label, key_override, model_override, use_proxy):
+    return gr.Accordion(label=status_short(label, key_override, model_override, use_proxy)), \
+        status_md(label, key_override, model_override, use_proxy)
+
+
 def build() -> gr.Blocks:
     with gr.Blocks(title="客户话题生成器") as demo:
+        gr.HTML(MOBILE_CSS)
         gr.Markdown("# 🗣️ 客户话题生成器 Demo\n录入客户资料 → AI 建立画像 → 生成话题 / 回复 / 对话陪练")
 
         with gr.Row():
@@ -38,16 +68,18 @@ def build() -> gr.Blocks:
             customer = gr.Dropdown(choices=storage.choices(), label="当前客户",
                                    value=(storage.choices() or [(None, None)])[0][1], scale=2)
             refresh_all_btn = gr.Button("🔄 刷新全部", scale=0, min_width=110)
-        with gr.Accordion("引擎高级设置（临时覆盖，不落盘）", open=False):
+        _lbl = PROVIDERS[DEFAULT_PROVIDER].label
+        with gr.Accordion(status_short(_lbl, "", "", PROXY_ENABLED), open=False) as engine_acc:
+            status = gr.Markdown(status_md(_lbl, "", "", PROXY_ENABLED))
+            gr.Markdown("临时覆盖（不落盘，刷新页面后失效）：")
             with gr.Row():
                 key_override = gr.Textbox(label="API Key 覆盖", type="password", placeholder="留空则用 .env")
                 model_override = gr.Textbox(label="模型名覆盖", placeholder="留空则用 .env")
                 use_proxy = gr.Checkbox(
                     label=f"走 HTTP 代理 {PROXY_URL}" if PROXY_URL else "走 HTTP 代理（请先在 .env 设置 PROXY_URL）",
                     value=PROXY_ENABLED, interactive=bool(PROXY_URL))
-        status = gr.Markdown(status_md(PROVIDERS[DEFAULT_PROVIDER].label, "", "", PROXY_ENABLED))
         for comp in (provider, key_override, model_override, use_proxy):
-            comp.change(status_md, [provider, key_override, model_override, use_proxy], [status])
+            comp.change(status_update, [provider, key_override, model_override, use_proxy], [engine_acc, status])
 
         shared = {"provider": provider, "customer": customer, "key": key_override, "model": model_override,
                   "proxy": use_proxy}

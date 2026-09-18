@@ -22,7 +22,7 @@ def build(shared: dict) -> tuple[list, callable]:
                             file_count="multiple", file_types=ingest.ACCEPTED_EXT, type="filepath")
             hint = gr.Textbox(label="补充说明（可选）", placeholder="例如：截图里右侧绿色气泡是我，左侧是客户")
         with gr.Column():
-            text = gr.Textbox(label="文字记录（可选）", lines=12,
+            text = gr.Textbox(label="文字记录（可选，Shift+Enter 直接录入）", lines=12,
                               placeholder="粘贴聊天记录、备忘、名片信息等")
     with gr.Row():
         auto = gr.Checkbox(label="录入后立即更新画像（增量：在现有画像基础上补充修正）", value=True)
@@ -54,8 +54,9 @@ def build(shared: dict) -> tuple[list, callable]:
         gr.Info(f"已录入 {len(added)} 条材料" + ("，画像已更新" if do_auto else ""))
         return ([a["extracted"] for a in added], *_inputs_view(storage.load(cid)), None, "")
 
-    ev_run = click_locked(btn.click, run, [customer_dd, files, hint, text, auto, prov, key, model, proxy],
-                          [result, inputs_md, del_sel, files, text], [btn, note_btn])
+    ev_run, ev_run2 = (click_locked(trig, run, [customer_dd, files, hint, text, auto, prov, key, model, proxy],
+                                    [result, inputs_md, del_sel, files, text], [btn, note_btn])
+                       for trig in (btn.click, text.submit))
 
     @safe
     def do_note(cid, txt, do_auto, p, k, m, px, progress=gr.Progress()):
@@ -82,5 +83,5 @@ def build(shared: dict) -> tuple[list, callable]:
     def refresh(cid):
         return _inputs_view(storage.load(cid) if cid else None)
 
-    events = [ev_run, ev_note, ev_del, refresh_btn.click(lambda: None)]
+    events = [ev_run, ev_run2, ev_note, ev_del, refresh_btn.click(lambda: None)]
     return [inputs_md, del_sel], refresh, events
