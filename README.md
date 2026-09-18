@@ -43,6 +43,8 @@ copy .env.example .env
 
 ## 引擎说明
 
+- **网络**：AI 请求默认忽略系统 `HTTP_PROXY` 环境变量，只按 `.env` 的 `PROXY_URL` / `PROXY_ENABLED` 或页面勾选决定是否走代理。若你的网络只能经代理访问模型接口（本项目当前环境即如此），请保持 `PROXY_ENABLED=true`；直连不通时会在半分钟内报错。
+
 - **MiniMax Coding Plan**：Anthropic 兼容地址 `https://api.minimaxi.com/anthropic`（海外为 `api.minimax.io`），模型名以控制台为准，默认 `MiniMax-M2.5`。如该模型不支持图片，把 `MINIMAX_SUPPORTS_VISION=false`，图片提取时切换到 Claude。
 - **Claude**：需要真实 API Key（`sk-ant-...`）。Claude Code 订阅本身不能直接作为 API Key 使用。
 - 调用层只用最小参数集（model / max_tokens / system / messages），不传 thinking 等扩展参数，以兼容第三方兼容层。JSON 结果靠 prompt 约束 + 宽松解析。

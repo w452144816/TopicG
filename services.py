@@ -9,6 +9,23 @@ import storage
 from config import ProviderConfig
 
 
+def _as_list(data: Any, item_key: str, wrapper_keys: tuple[str, ...]) -> list[dict[str, Any]]:
+    """把模型返回的 list / {"topics": [...]} / 单个对象 统一成 list。"""
+    if isinstance(data, dict):
+        if item_key in data:            # 单个对象
+            return [data]
+        for k in wrapper_keys:
+            if isinstance(data.get(k), list):
+                return data[k]
+        for v in data.values():         # 任意一个 list 字段
+            if isinstance(v, list):
+                return v
+        raise ai.AIError("结果格式异常，请重试。原文：" + str(data)[:300])
+    if isinstance(data, list):
+        return [x for x in data if isinstance(x, dict)]
+    raise ai.AIError("结果格式异常，请重试。")
+
+
 def _require(cid: str) -> dict[str, Any]:
     c = storage.load(cid)
     if not c:
@@ -59,10 +76,7 @@ def generate_topics(cid: str, purpose: str, n: int, provider: ProviderConfig) ->
     if not c.get("profile"):
         raise ai.AIError("该客户尚未分析，请先在「分析页」生成画像。")
     topics = ai.chat_json(provider, prompts.TOPICS_SYSTEM, prompts.build_topics_input(c, purpose, n), max_tokens=6000)
-    if isinstance(topics, dict):
-        topics = topics.get("topics") or list(topics.values())[0]
-    if not isinstance(topics, list):
-        raise ai.AIError("话题结果格式异常，请重试。")
+    topics = _as_list(topics, "opening_line", ("topics", "items", "data"))
     c["topics_history"].insert(0, {"generated_at": storage.now(), "purpose": purpose,
                                    "provider": provider.label, "topics": topics})
     c["topics_history"] = c["topics_history"][:20]
@@ -78,10 +92,7 @@ def generate_replies(cid: str, incoming: str, styles: list[str], provider: Provi
         styles = ["亲切"]
     ctx = "\n".join(f"{'我' if m['role'] == 'user' else '客户'}：{m['content']}" for m in c["chat_history"][-8:])
     replies = ai.chat_json(provider, prompts.REPLY_SYSTEM, prompts.build_reply_input(c, incoming, styles, ctx))
-    if isinstance(replies, dict):
-        replies = replies.get("replies") or list(replies.values())[0]
-    if not isinstance(replies, list):
-        raise ai.AIError("回复结果格式异常，请重试。")
+    replies = _as_list(replies, "reply", ("replies", "items", "data"))
     return replies
 
 

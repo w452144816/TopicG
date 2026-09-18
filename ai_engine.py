@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import anthropic
+import httpx2
 
 from config import ProviderConfig
 
@@ -28,8 +29,16 @@ _MEDIA = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
 def get_client(cfg: ProviderConfig) -> anthropic.Anthropic:
     if not cfg.ready:
         raise AIError(f"{cfg.label} 未配置 API Key，请在 .env 或页面顶部填入。")
-    http_client = anthropic.DefaultHttpxClient(proxy=cfg.proxy) if cfg.proxy else None
-    return anthropic.Anthropic(api_key=cfg.api_key, base_url=cfg.base_url, timeout=180.0, max_retries=1,
+    # SDK 默认客户端会无条件把系统 HTTP(S)_PROXY 挂载上去，trust_env 管不到；
+    # 这里用显式 mounts 覆盖所有 scheme：配置了代理就走 cfg.proxy，否则真直连。
+    # 建连 5 秒超时（域名有多个 IP 时会逐个尝试）：网络不通时快速报错，而不是挂满 180 秒（超时必须设在自建 http_client 上）
+    timeout = anthropic.Timeout(180.0, connect=5.0)
+    transport = httpx2.HTTPTransport(proxy=cfg.proxy or None)
+    http_client = anthropic.DefaultHttpxClient(
+        timeout=timeout, trust_env=False,
+        mounts={"all://": transport, "http://": transport, "https://": transport},
+    )
+    return anthropic.Anthropic(api_key=cfg.api_key, base_url=cfg.base_url, timeout=timeout, max_retries=0,
                                http_client=http_client)
 
 
